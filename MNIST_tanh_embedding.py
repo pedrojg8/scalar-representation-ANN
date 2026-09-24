@@ -570,11 +570,15 @@ def lyapunov_embedding_1(learning_rate, initial_state):
 
 def p_delta_embedding(learning_rate, init_idx, initial_state, out_dir="results_shards"):
     """
-    Run one initial-condition shard for a fixed learning rate.
+    Run one perturbation-batch shard for a fixed learning rate.
 
-    This routine is intended for large SLURM job arrays. Each job computes only
-    one initial condition and writes an independent ``.npz`` shard, which makes
-    the experiment easier to resume and reduces the risk of losing results.
+    This routine is intended for large SLURM job arrays. When called
+    from main_2(), all batches and learning rates use the same reference
+    initialization. Each batch generates new perturbed replicas around
+    that common state.
+
+    The argument init_idx identifies the batch and its output file;
+    it does not select a new reference initialization.
     """
     num_epochs = 200
     epsilon = np.array([1e-8])
@@ -1353,10 +1357,15 @@ def main_1():
 
 def main_2():
     """
-    Sharded SLURM-array entry point.
+    Sharded SLURM-array entry point for a fixed reference initialization.
 
-    The SLURM task id encodes both the learning-rate index and the initial
-    condition index. Each job writes one independent shard.
+    All jobs load the same reference state from initial_state.pt.
+    The SLURM task ID selects a learning rate and a perturbation-batch
+    index. Each job generates a new batch of perturbed replicas around
+    that common reference state and saves one independent output file.
+
+    Here, init_idx labels a perturbation batch, not a different
+    reference initialization.
     """
     learning_rate_array = [
         0.0005, 0.001, 0.005, 0.01,
@@ -1369,7 +1378,7 @@ def main_2():
 
     tid = int(os.environ["SLURM_ARRAY_TASK_ID"])
     lr_idx = tid // n_init
-    init_idx = tid % n_init
+    init_idx = tid % n_init # Perturbation-batch index
 
     learning_rate = learning_rate_array[lr_idx]
 
@@ -1384,7 +1393,7 @@ if __name__ == "__main__":
     # Choose the desired entry point:
     #   main()    -> standard learning-rate array
     #   main_1()  -> fine eta sweep from a common initial condition
-    #   main_2()  -> sharded array over learning rates and initial conditions
+    #   main_2()  -> sharded array over learning rates and perturbation batches
     main()
     # main_1()
     # main_2()
